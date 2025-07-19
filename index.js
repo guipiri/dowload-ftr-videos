@@ -1,19 +1,26 @@
 import { exec } from 'node:child_process'
 import fs from 'node:fs'
 
-const className = 'aplicacao-de-upload-de-imagens'
+const classSlug = 'documentacao-de-ap-is-node-js-com-open-api'
 
 const bearerToken = process.env.BEARER_TOKEN
 
-const journeyNodesUrl = `https://skylab-api.rocketseat.com.br/journey-nodes/${className}`
+const journeyNodesUrl = `https://skylab-api.rocketseat.com.br/journey-nodes/${classSlug}`
 
-const videoUrl = (id) =>
+const videoUrlFtr = (id) =>
   `https://vz-dc851587-83d.b-cdn.net/${id}/1080p/video.m3u8`
 
+const refererFtr = 'https://iframe.mediadelivery.net/'
+
+const videoUrlClasses = (id) =>
+  `https://b-vz-762f4670-e04.tv.pandavideo.com.br/${id}/1920x1080/video.m3u8`
+
+const refererClasses = 'https://player-vz-762f4670-e04.tv.pandavideo.com.br/'
+
 // Function to download the video using FFmpeg
-async function downloadVideo(url, output) {
+async function downloadVideo(url, output, referer = refererFtr) {
   console.log('Starting video download...')
-  const command = `ffmpeg -headers "Referer: https://iframe.mediadelivery.net/" -i "${url}" -c copy -bsf:a aac_adtstoasc "./aulas/${className}/${output}"`
+  const command = `ffmpeg -headers "Referer: ${referer}" -i "${url}" -c copy -bsf:a aac_adtstoasc "./ftr/${classSlug}/${output}"`
 
   return new Promise((resolve, reject) => {
     exec(command, (error, stdout, stderr) => {
@@ -30,8 +37,8 @@ async function downloadVideo(url, output) {
 
 async function main() {
   try {
-    if (!fs.existsSync(className)) {
-      fs.mkdirSync(`aulas/${className}`)
+    if (!fs.existsSync(`ftr/${classSlug}`)) {
+      fs.mkdirSync(`ftr/${classSlug}`)
     }
   } catch (err) {
     console.error(err)
@@ -43,23 +50,42 @@ async function main() {
     },
   })
   const resJson = await res.json()
-  const lessons = resJson.group.lessons
 
-  for (let index = 0; index < lessons.length; index++) {
-    const lesson = lessons[index]
-    const title = `${index + 1} - ${lesson.last.title
-      .replaceAll('&', 'e')
-      .replaceAll(':', '')}`
+  const lessonsGroups = resJson.cluster?.groups || [resJson.group]
 
-    fs.writeFile(
-      `aulas/${className}/${title}.txt`,
-      lesson.last.description,
-      () => {
-        console.log(title)
-      }
-    )
+  for (let i = 0; i < lessonsGroups.length; i++) {
+    const group = lessonsGroups[i]
+    const groupName = `${i + 1} - ${group.title.replaceAll('/', '-')}`
+    const groupLessons = group.lessons
 
-    // await downloadVideo(videoUrl(lesson.last.resource), `${title}.mp4`)
+    if (!fs.existsSync(`ftr/${classSlug}/${groupName}`)) {
+      fs.mkdirSync(`ftr/${classSlug}/${groupName}`)
+    }
+
+    for (let index = 0; index < groupLessons.length; index++) {
+      const lesson = groupLessons[index]
+      if (lesson.type !== 'video') continue
+      const title = `${index + 1} - ${lesson.last.title
+        .replaceAll('&', 'e')
+        .replaceAll(':', '')
+        .replaceAll('/', ' ')
+        .replaceAll('"', '')
+        .replaceAll(',', '')}`
+
+      fs.writeFile(
+        `ftr/${classSlug}/${groupName}/${title}.txt`,
+        lesson.last.description || '',
+        () => {
+          console.log(title)
+        }
+      )
+
+      downloadVideo(
+        videoUrlFtr(lesson.last.resource),
+        `${groupName}/${title}.mp4`,
+        refererFtr
+      )
+    }
   }
 }
 
